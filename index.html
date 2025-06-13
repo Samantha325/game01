@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>撞球遊戲</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Matter.js 物理引擎 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+</head>
+<body>
+    <div class="game-container">
+        <div class="game-header">
+            <h1>線上撞球遊戲</h1>
+            <div class="score-board">
+                <span>回合: <span id="turn">1</span></span>
+                <span>分數: <span id="score">0</span></span>
+            </div>
+        </div>
+        <canvas id="gameCanvas" style="border: 4px solid #654321; background: #076324;"></canvas>
+        <div class="game-info">遊戲狀態: <span id="gameStatus">準備中</span></div>
+        <div class="controls">
+            <button id="resetBtn">重新開始</button>
+            <div class="power-meter">
+                <div id="powerBar"></div>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
