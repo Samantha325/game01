@@ -151,6 +151,11 @@ function checkPocketCollisions() {
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             if (distance < POCKET_RADIUS) {
+                // 添加進球動畫
+                VisualEffects.addPocketAnimation(pocket.x, pocket.y);
+                // 播放進球音效
+                AudioSystem.playPocket();
+                
                 if (ball === whiteBall) {
                     // 白球進洞，重置位置
                     Matter.Body.setPosition(ball.body, { x: 200, y: 200 });
@@ -203,6 +208,9 @@ class Ball {
 
     draw() {
         const pos = this.body.position;
+        
+        // 繪製球的陰影
+        VisualEffects.drawShadow(ctx, pos.x, pos.y, this.radius);
         
         // 繪製球的基本顏色
         ctx.beginPath();
@@ -477,18 +485,29 @@ function drawCue() {
     // 計算方向（從球指向滑鼠的反方向，這樣球桿會在正確的位置）
     const angle = Math.atan2(ballPos.y - mousePos.y, ballPos.x - mousePos.x);
     
+    // 繪製力度預覽效果
+    VisualEffects.drawPowerPreview(ctx, ballPos, angle, power);
+    
     // 繪製球桿
     ctx.save();
     ctx.translate(ballPos.x, ballPos.y);
     ctx.rotate(angle);
     
     // 球桿長度根據蓄力程度變化
-    const cueLength = 150 + (power * 0.5); // 增加基礎長度
+    const cueLength = 150 + (power * 0.5);
+    
+    // 繪製球桿陰影
+    ctx.beginPath();
+    ctx.moveTo(2, 2);
+    ctx.lineTo(cueLength + 2, 2);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.lineWidth = 10;
+    ctx.stroke();
     
     // 繪製球桿
     ctx.beginPath();
-    ctx.moveTo(0, 0);          // 從白球位置開始
-    ctx.lineTo(cueLength, 0);  // 向後延伸
+    ctx.moveTo(0, 0);
+    ctx.lineTo(cueLength, 0);
     ctx.strokeStyle = '#8B4513';
     ctx.lineWidth = 8;
     ctx.stroke();
@@ -613,6 +632,11 @@ Matter.Events.on(engine, 'collisionStart', (event) => {
                         y: velocity.y * scale
                     });
                 }
+                
+                // 播放碰撞音效
+                if (speed > 1) {  // 只有當速度超過閾值時才播放音效
+                    AudioSystem.playCollision(speed);
+                }
             }
         });
     });
@@ -697,8 +721,142 @@ function gameLoop() {
         drawCue();
     }
     
+    // 更新進球動畫
+    VisualEffects.updatePocketAnimations(ctx);
+    
     requestAnimationFrame(gameLoop);
 }
+
+// 音效系統
+const AudioSystem = {
+    context: new (window.AudioContext || window.webkitAudioContext)(),
+    sounds: {},
+
+    // 初始化音效
+    init() {
+        this.createCollisionSound();
+        this.createPocketSound();
+    },
+
+    // 創建碰撞音效
+    createCollisionSound() {
+        const buffer = this.context.createBuffer(1, 1024, this.context.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        this.sounds.collision = buffer;
+    },
+
+    // 創建進球音效
+    createPocketSound() {
+        const buffer = this.context.createBuffer(1, 2048, this.context.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+            data[i] = Math.sin(440 * Math.PI * 2 * i / this.context.sampleRate) *
+                     Math.exp(-4 * i / data.length);
+        }
+        this.sounds.pocket = buffer;
+    },
+
+    // 播放碰撞音效
+    playCollision(velocity) {
+        const source = this.context.createBufferSource();
+        const gain = this.context.createGain();
+        source.buffer = this.sounds.collision;
+        
+        // 根據碰撞速度調整音量
+        const volume = Math.min(Math.abs(velocity) / 15, 1) * 0.3;
+        gain.gain.value = volume;
+        
+        source.connect(gain);
+        gain.connect(this.context.destination);
+        source.start();
+    },
+
+    // 播放進球音效
+    playPocket() {
+        const source = this.context.createBufferSource();
+        const gain = this.context.createGain();
+        source.buffer = this.sounds.pocket;
+        gain.gain.value = 0.3;
+        
+        source.connect(gain);
+        gain.connect(this.context.destination);
+        source.start();
+    }
+};
+
+// 視覺效果系統
+const VisualEffects = {
+    // 繪製球體陰影
+    drawShadow(ctx, x, y, radius) {
+        const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius * 1.2);
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0.3)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        
+        ctx.beginPath();
+        ctx.arc(x + 2, y + 2, radius * 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+    },
+
+    // 進球動畫效果
+    pocketAnimation: [],
+    
+    // 添加進球動畫
+    addPocketAnimation(x, y) {
+        this.pocketAnimation.push({
+            x, y,
+            radius: POCKET_RADIUS,
+            alpha: 1,
+            scale: 1
+        });
+    },
+
+    // 更新和繪製進球動畫
+    updatePocketAnimations(ctx) {
+        this.pocketAnimation = this.pocketAnimation.filter(anim => {
+            anim.alpha -= 0.05;
+            anim.scale += 0.1;
+            
+            if (anim.alpha <= 0) return false;
+            
+            ctx.beginPath();
+            ctx.arc(anim.x, anim.y, anim.radius * anim.scale, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${anim.alpha})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            return true;
+        });
+    },
+
+    // 力度預覽效果
+    drawPowerPreview(ctx, ballPos, angle, power) {
+        const gradient = ctx.createLinearGradient(
+            ballPos.x, ballPos.y,
+            ballPos.x - Math.cos(angle) * 200,
+            ballPos.y - Math.sin(angle) * 200
+        );
+        
+        gradient.addColorStop(0, `rgba(255, ${255 - power * 2}, 0, 0.5)`);
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        
+        ctx.beginPath();
+        ctx.moveTo(ballPos.x, ballPos.y);
+        ctx.lineTo(
+            ballPos.x - Math.cos(angle) * (200 * power / 100),
+            ballPos.y - Math.sin(angle) * (200 * power / 100)
+        );
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 4;
+        ctx.stroke();
+    }
+};
+
+// 初始化音效系統
+AudioSystem.init();
 
 // 事件監聽
 canvas.addEventListener('mousemove', (event) => {
